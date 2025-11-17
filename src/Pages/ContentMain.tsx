@@ -5,6 +5,9 @@ export const ContentMain = () => {
   const { id } = useParams<{ id: string }>();
   const { contents } = useContent();
 
+  const idNum = Number(id);
+  if (isNaN(idNum)) return <p>Invalid id</p>;
+
   const content = contents.find((c) => c.id === Number(id));
   if (!content) return <p>Content not found</p>;
 
