@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useContent } from "../components/ContentProvider";
 import { useNavigate } from "react-router-dom";
+import { useContent } from "../context/content/useContent";
 
 export const ContentHolder = () => {
   const { contents, deleteContent } = useContent();
@@ -15,33 +15,20 @@ export const ContentHolder = () => {
         <ul className="flex flex-wrap gap-6">
           {contents.map((c) => (
             <li key={c.id} className="mt-2 w-72">
-              <div
-                className="
-      bg-white/10 backdrop-blur-xl 
-      border border-white/20 
-      shadow-[0_0_20px_rgba(0,0,0,0.15)]
-      p-6 rounded-2xl flex flex-col gap-4
-      hover:shadow-[0_0_25px_rgba(0,0,0,0.25)]
-      hover:scale-[1.02] transition-all duration-300
-    "
-              >
-                {/* Title */}
+              <div className="bg-white/10 backdrop-blur-xl border border-white/20  shadow-[0_0_20px_rgba(0,0,0,0.15)] p-6 rounded-2xl flex flex-col gap-4 hover:shadow-[0_0_25px_rgba(0,0,0,0.25)] hover:scale-[1.02] transition-all duration-300">
                 <h2 className="text-xl font-semibold text-gray-900 tracking-wide">
                   {c.title.charAt(0).toUpperCase() + c.title.slice(1)}
                 </h2>
 
-                {/* ID */}
                 <span className="text-gray-500 text-sm font-medium">
                   ID: {c.id}
                 </span>
 
-                {/* Description */}
                 <p className="text-gray-700 leading-snug">
                   {c.description.charAt(0).toUpperCase() +
                     c.description.slice(1)}
                 </p>
 
-                {/* Result Section */}
                 <div className="flex items-center justify-between mt-2 bg-white/20 p-3 rounded-xl">
                   <span className="font-semibold text-gray-800">Result</span>
 
@@ -55,8 +42,7 @@ export const ContentHolder = () => {
                   </div>
                 </div>
 
-                {/* Controls */}
-                <div className="flex justify-end gap-2 mt-4">
+                  <div className="flex justify-end gap-2 mt-4">
                   <button
                     onClick={() => {
                       if (

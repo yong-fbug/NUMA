@@ -26,7 +26,7 @@ const data = {
     {
       label: "Sales",
       data: [10, 20, 15, 30, 25],
-      borderColor: "rgb(14, 165, 233)", // Tailwind sky-500 color
+      borderColor: "rgb(14, 165, 233)",
       backgroundColor: "rgba(14, 165, 233, 0.2)",
     },
   ],
