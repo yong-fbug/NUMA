@@ -1,14 +1,15 @@
-import { PlusCircle, Bell, XSquare } from "lucide-react";
+import { PlusCircle, Bell, XSquare, InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { useContent } from "../../context/content/useContent";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContentHeader } from "../actionButton/ContentHeader";
 
 export const HeaderContent = () => {
   const [showAdd, setShowAdd] = useState<boolean>(false);
-
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const { addContent } = useContent();
+  const navigate = useNavigate();
 
   const addContentButton = () => {
     setShowAdd((prev) => !prev);
@@ -26,22 +27,24 @@ export const HeaderContent = () => {
 
   const location = useLocation();
   if (location.pathname.startsWith("/content")) {
-    return (
-      <div className="flex flex-1 items-center justify-center px-6 h-16">
-        <h2 className="text-lg font-semibold text-slate-700">
-          Viewing Content
-        </h2>
-      </div>
-    );
+    return <ContentHeader />;
   }
   return (
     <div className="flex flex-1 items-center justify-center space-x-4 px-6 h-16">
       <div className="flex flex-1 items-center justify-center space-x-4 px-6 h-16">
-        <PlusCircle
-          onClick={addContentButton}
-          className="w-6 h-6 text-slate-700 hover:text-emerald-500 cursor-pointer transition-colors"
-        />
-        <Bell className="w-6 h-6 text-slate-700 hover:text-amber-500 cursor-pointer transition-colors" />
+        <button className="hover:bg-slate-200 p-2 rounded-full transition-colors">
+          <PlusCircle
+            onClick={addContentButton}
+            className="w-6 h-6 text-slate-700 hover:text-emerald-500 cursor-pointer transition-colors"
+          />
+        </button>
+
+         <button className="hover:bg-slate-200 p-2 rounded-full transition-colors">
+          <InfoIcon
+            onClick={() => navigate("/about")}
+            className="w-6 h-6 text-slate-700 hover:text-slate-500 cursor-pointer transition-colors"
+          />
+        </button>
       </div>
 
       {/*modal */}

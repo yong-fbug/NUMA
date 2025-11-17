@@ -14,7 +14,7 @@ export const ContentMain = () => {
   if (!content) return <p>Content not found</p>;
 
   return (
-    <div className="bg-red-900 w-full   ">
+    <div className=" w-full   ">
       <button onClick={() => navigate(-1)}>
         <ChevronLeft />
       </button>
