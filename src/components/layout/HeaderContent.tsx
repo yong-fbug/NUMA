@@ -1,4 +1,4 @@
-import { PlusCircle, Bell, XSquare, InfoIcon } from "lucide-react";
+import { PlusCircle, XSquare, InfoIcon } from "lucide-react";
 import { useState } from "react";
 import { useContent } from "../../context/content/useContent";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -39,7 +39,7 @@ export const HeaderContent = () => {
           />
         </button>
 
-         <button className="hover:bg-slate-200 p-2 rounded-full transition-colors">
+        <button className="hover:bg-slate-200 p-2 rounded-full transition-colors">
           <InfoIcon
             onClick={() => navigate("/about")}
             className="w-6 h-6 text-slate-700 hover:text-slate-500 cursor-pointer transition-colors"
