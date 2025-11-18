@@ -23,3 +23,9 @@ topological sortk
 -[x] a card hold same operator then use of connector to different card -[x] A card can add multiple input/value
 
 -[y] I can't not proceed with Topological sorting because of UI link id selection, if i do it's going messy and hard to understand and if UI it's consume alot of space. But use of a mother and child method. Mother is the entire Card and the result from inputs is the children. I can now create a child node then use of it i can now talk to other cards.
+
+11-18-25 (22:45)
+
+-[y] still fixing
+
+-[x] do not forget to slice those piece so files will not be crowded and hard to read
