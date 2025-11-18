@@ -1,20 +1,27 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
-type Link = { linkFrom: string; linkTo: string };
 type Card = {
   id: string;
   label: string;
   value: string;
+};
+
+type LogicCollection = {
   operator: string;
-  links: Link[];
+  linkFrom: string;
+  linkTo: string;
 };
 
 export const CardCalculator = () => {
   const [cards, setCards] = useState<Card[]>([]);
+  const [cardsLogic, setCardsLogic] = useState<LogicCollection[]>([]);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [newLabel, setNewLabel] = useState("");
+  const [computedValues, setComputedValues] = useState<Record<string, number>>(
+    {}
+  );
   const [totalResult, setTotalResult] = useState<number | null>(null);
-  console.log(cards, "result:", totalResult);
 
   const addCard = () => {
     if (!newLabel.trim()) return;
@@ -24,44 +31,20 @@ export const CardCalculator = () => {
         id: crypto.randomUUID(),
         label: newLabel,
         value: "",
-        operator: "+",
-        links: [],
       },
     ]);
     setNewLabel("");
     setShowAddPanel(false);
   };
 
-  const addLink = (fromId: string, toId: string) => {
-    setCards((prev) =>
-      prev.map((c) =>
-        c.id === fromId
-          ? { ...c, links: [...c.links, { linkFrom: fromId, linkTo: toId }] }
-          : c
-      )
-    );
+  const addLink = (fromId: string, toId: string, operator: string) => {
+    setCardsLogic((prev) => [
+      ...prev,
+      { linkFrom: fromId, linkTo: toId, operator },
+    ]);
   };
 
-  const computeCard = (card: Card, visited = new Set<string>()): number => {
-    if (visited.has(card.id)) return 0; // avoid loops
-    visited.add(card.id);
-
-    let val = Number(card.value) || 0;
-
-    card.links.forEach((link) => {
-      const linkedCard = cards.find((c) => c.id === link.linkTo);
-      if (linkedCard)
-        val = computeOperator(
-          val,
-          computeCard(linkedCard, visited),
-          card.operator
-        );
-    });
-
-    return val;
-  };
-
-  const computeOperator = (a: number, b: number, op: string): number => {
+  const computeOperator = (a: number, b: number, op: string) => {
     switch (op) {
       case "+":
         return a + b;
@@ -76,19 +59,46 @@ export const CardCalculator = () => {
     }
   };
 
-  const handleSubmit = () => {
-    const sum = cards
-      .filter((c) => c.links.length > 0)
-      .reduce((acc, card) => acc + computeCard(card), 0);
+  const computeAllCards = () => {
+    const results: Record<string, number> = {};
+    const visited = new Set<string>();
 
-    setTotalResult(sum);
+    const compute = (card: Card): number => {
+      if (visited.has(card.id)) return results[card.id] || 0;
+      visited.add(card.id);
+
+      let val = Number(card.value) || 0;
+
+      const outgoingLinks = cardsLogic.filter((l) => l.linkFrom === card.id);
+
+      outgoingLinks.forEach((link) => {
+        const child = cards.find((c) => c.id === link.linkTo);
+        if (child) val = computeOperator(val, compute(child), link.operator);
+      });
+
+      results[card.id] = val;
+      return val;
+    };
+
+    cards.forEach(compute);
+    setComputedValues(results);
+
+    // total = sum of all cards with links
+    const total = cardsLogic.reduce((acc, link) => {
+      return acc + (results[link.linkFrom] || 0);
+    }, 0);
+    setTotalResult(total);
   };
+  console.log("CARDS", cards);
+  console.log("card links", cardsLogic);
+  console.log("Computation Storage", computedValues);
 
   return (
     <div>
       <button onClick={() => setShowAddPanel((p) => !p)}>
         {showAddPanel ? "Cancel" : "Add Card"}
       </button>
+
       {showAddPanel && (
         <form
           onSubmit={(e) => {
@@ -160,7 +170,10 @@ export const CardCalculator = () => {
                 const sel = document.getElementById(
                   `link-to-${card.id}`
                 ) as HTMLSelectElement;
-                if (sel.value) addLink(card.id, sel.value);
+                const opSel = document.getElementById(
+                  `operator-${card.id}`
+                ) as HTMLSelectElement;
+                if (sel.value) addLink(card.id, sel.value, opSel.value);
               }}
               className="bg-green-600 text-white px-2 rounded-md"
             >
@@ -169,35 +182,46 @@ export const CardCalculator = () => {
           </div>
 
           <div className="text-sm text-gray-700 mt-1">
-            {card.links.map((l, i) => (
-              <div key={i}>
-                {card.label} →{" "}
-                {cards.find((c) => c.id === l.linkTo)?.label || "?"}
-              </div>
-            ))}
+            {cardsLogic
+              .filter((l) => l.linkFrom === card.id)
+              .map((l, i) => {
+                const toCardLabel =
+                  cards.find((c) => c.id === l.linkTo)?.label || "";
+                return (
+                  <div key={i}>
+                    {card.label} <ChevronRight /> {toCardLabel} ({l.operator})
+                  </div>
+                );
+              })}
+
+            {cardsLogic
+              .filter((l) => l.linkTo === card.id)
+              .map((l, i) => {
+                const fromCardLabel =
+                  cards.find((c) => c.id === l.linkFrom)?.label || "?";
+                return (
+                  <div key={i}>
+                    {fromCardLabel} <ChevronLeft /> {card.label} ({l.operator})
+                  </div>
+                );
+              })}
           </div>
 
-          <select
-            value={card.operator}
-            onChange={(e) =>
-              setCards((prev) =>
-                prev.map((c) =>
-                  c.id === card.id ? { ...c, operator: e.target.value } : c
-                )
-              )
-            }
-            className="border mt-1 p-1"
-          >
+          <select id={`operator-${card.id}`} className="border mt-1 p-1">
             <option value="+">+</option>
             <option value="-">-</option>
             <option value="*">×</option>
             <option value="/">÷</option>
           </select>
+
+          <div className="mt-1 text-blue-700">
+            Computed: {computedValues[card.id] ?? 0}
+          </div>
         </div>
       ))}
 
       <button
-        onClick={handleSubmit}
+        onClick={computeAllCards}
         className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md"
       >
         Show Result
