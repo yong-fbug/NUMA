@@ -1,0 +1,188 @@
+    import { useState } from "react";
+    import { Trash2, Plus } from "lucide-react";
+
+    type Card = {
+    id: string;
+    label: string;
+    value: string;
+    operator: string; // "+", "-", "*", "/"
+    linkedId: string | null;
+    };
+
+    export const CardCalculator = () => {
+    const [cards, setCards] = useState<Card[]>([
+        {
+        id: crypto.randomUUID(),
+        label: "",
+        value: "",
+        operator: "+",
+        linkedId: null,
+        },
+    ]);
+    const [totalResult, setTotalResult] = useState<number | null>(null);
+
+    const updateCard = (id: string, field: keyof Card, value: string | null) => {
+        setCards((prev) =>
+        prev.map((card) => (card.id === id ? { ...card, [field]: value } : card))
+        );
+    };
+
+    const addCard = () => {
+        setCards((prev) => [
+        ...prev,
+        {
+            id: crypto.randomUUID(),
+            label: "",
+            value: "",
+            operator: "+",
+            linkedId: null,
+        },
+        ]);
+    };
+
+    const deleteCard = (id: string) => {
+        setCards((prev) => prev.filter((c) => c.id !== id));
+    };
+
+    // Recursive calculation for a single card
+    const computeCardValue = (
+        card: Card,
+        visited = new Set<string>()
+    ): number => {
+        const base = Number(card.value);
+        if (isNaN(base)) return 0;
+
+        if (!card.linkedId || visited.has(card.id)) return base;
+
+        const linkedCard = cards.find((c) => c.id === card.linkedId);
+        if (!linkedCard) return base;
+
+        visited.add(card.id);
+        const linkedValue = computeCardValue(linkedCard, visited);
+
+        switch (card.operator) {
+        case "+":
+            return base + linkedValue;
+        case "-":
+            return base - linkedValue;
+        case "*":
+            return base * linkedValue;
+        case "/":
+            return linkedValue !== 0 ? base / linkedValue : base;
+        default:
+            return base;
+        }
+    };
+
+    // Compute total only from root cards (not linked by any other)
+    const handleSubmit = () => {
+        const linkedIds = new Set(
+        cards.map((c) => c.linkedId).filter(Boolean) as string[]
+        );
+        const rootCards = cards.filter((c) => !linkedIds.has(c.id));
+        const sum = rootCards.reduce(
+        (acc, card) => acc + computeCardValue(card),
+        0
+        );
+        setTotalResult(sum);
+    };
+
+    return (
+        <div className="space-y-6">
+        {/* Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {cards.map((card) => (
+            <div
+                key={card.id}
+                className="p-4 border rounded-xl shadow-sm bg-white flex flex-col gap-3"
+            >
+                {/* Label */}
+                <input
+                type="text"
+                placeholder="Label"
+                value={card.label}
+                onChange={(e) => updateCard(card.id, "label", e.target.value)}
+                className="border rounded-lg p-2 outline-none"
+                />
+
+                {/* Value */}
+                <input
+                type="number"
+                placeholder="Value"
+                value={card.value}
+                onChange={(e) => updateCard(card.id, "value", e.target.value)}
+                className="border rounded-lg p-2 outline-none"
+                />
+
+                {/* Link to another card */}
+                <select
+                value={card.linkedId ?? ""}
+                onChange={(e) => {
+                    const value = e.target.value === "" ? null : e.target.value;
+                    updateCard(card.id, "linkedId", value);
+                    if (value) updateCard(card.id, "operator", "+"); // default operator
+                }}
+                className="border p-2 rounded-lg"
+                >
+                <option value="">No Link</option>
+                {cards
+                    .filter((c) => c.id !== card.id)
+                    .map((other) => (
+                    <option key={other.id} value={other.id}>
+                        {other.label || other.id.slice(0, 4)}
+                    </option>
+                    ))}
+                </select>
+
+                {/* Operator — only show if linked */}
+                {card.linkedId && (
+                <select
+                    value={card.operator}
+                    onChange={(e) =>
+                    updateCard(card.id, "operator", e.target.value)
+                    }
+                    className="border p-2 rounded-lg"
+                >
+                    <option value="+">+</option>
+                    <option value="-">-</option>
+                    <option value="*">×</option>
+                    <option value="/">÷</option>
+                </select>
+                )}
+
+                {/* Delete */}
+                <button
+                onClick={() => deleteCard(card.id)}
+                className="text-red-500 hover:text-red-700 flex items-center gap-2"
+                >
+                <Trash2 size={16} /> Delete
+                </button>
+            </div>
+            ))}
+        </div>
+
+        {/* Add Card */}
+        <button
+            onClick={addCard}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+        >
+            <Plus size={18} /> Add Card
+        </button>
+
+        {/* Submit Result */}
+        <button
+            onClick={handleSubmit}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg mt-4"
+        >
+            Submit Result
+        </button>
+
+        {/* Show Result */}
+        {totalResult !== null && (
+            <div className="p-4 bg-gray-100 rounded-lg text-lg font-bold mt-2">
+            Total Result: {totalResult}
+            </div>
+        )}
+        </div>
+    );
+    };
