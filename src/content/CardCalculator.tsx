@@ -9,64 +9,47 @@ type CardValue = {
 
 type Card = {
   id: string;
+  title: string;
   cardValue: CardValue[];
 };
 
 type LogicCollection = {
-  operator: string;
   linkFrom: string;
   linkTo: string;
+  operator: "+" | "-" | "*" | "/";
 };
+
+const newId = (prefix = "") =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? (crypto as any).randomUUID()
+    : `${prefix}${Math.random().toString(36).slice(2, 9)}`;
 
 export const CardCalculator = () => {
   const [cards, setCards] = useState<Card[]>([]);
   const [cardsLogic, setCardsLogic] = useState<LogicCollection[]>([]);
   const [showAddPanel, setShowAddPanel] = useState(false);
+  const [newTitle, setnewTitle] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [computedValues, setComputedValues] = useState<Record<string, number>>(
     {}
   );
   const [totalResult, setTotalResult] = useState<number | null>(null);
 
-  const addCard = (cardId?: string) => {
-    if (!newLabel.trim()) return;
-    const newId = `A${cards.length + 1}`;
-    //temporarly id for card value
-    const newCardId = `B${cards.length + 1}`;
-    if (cardId) {
-      setCards((prev) =>
-        prev.map((card) =>
-          card.id === cardId
-            ? {
-                ...card,
-                cardValue: [
-                  ...card.cardValue,
-                  { id: newId, label: "", value: "" },
-                ],
-              }
-            : card
-        )
-      );
-    } else {
-      setCards((prev) => [
-        ...prev,
-        {
-          id: newId,
-          cardValue: [{ id: newCardId, label: newLabel, value: "" }],
-        },
-      ]);
-    }
+  const addCard = (title?: string) => {
+    const t = (title ?? newTitle).trim();
+    if (!t) return;
 
-    setNewLabel("");
+    const card: Card = {
+      id: newId("c-"),
+      title: t,
+      cardValue: [{ id: newId("v-"), label: "value", value: "" }],
+    };
+    setCards((p) => [...p, card]);
+    setnewTitle("");
     setShowAddPanel(false);
   };
 
-  const addLink = (fromId: string, toId: string, operator: string) => {
-    setCardsLogic((prev) => [
-      ...prev,
-      { linkFrom: fromId, linkTo: toId, operator },
-    ]);
-  };
+  const addCardValue = (cardId: string) => {}
 
   const computeOperator = (a: number, b: number, op: string) => {
     switch (op) {
