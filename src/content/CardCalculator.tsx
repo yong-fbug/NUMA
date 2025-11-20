@@ -1,57 +1,139 @@
+import { useCallback, useMemo, useState } from "react";
+import type { Card, CardValue, LogicCollection } from "./types/card";
+import { CardId } from "./components/CardId";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
 
-type CardValue = {
-  id: string;
-  label: string;
-  value: string;
-};
-
-type Card = {
-  id: string;
-  title: string;
-  cardValue: CardValue[];
-};
-
-type LogicCollection = {
-  linkFrom: string;
-  linkTo: string;
-  operator: "+" | "-" | "*" | "/";
-};
-
-const newId = (prefix = "") =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? (crypto as any).randomUUID()
-    : `${prefix}${Math.random().toString(36).slice(2, 9)}`;
+const valueId = CardId();
 
 export const CardCalculator = () => {
   const [cards, setCards] = useState<Card[]>([]);
   const [cardsLogic, setCardsLogic] = useState<LogicCollection[]>([]);
-  const [showAddPanel, setShowAddPanel] = useState(false);
-  const [newTitle, setnewTitle] = useState("");
-  const [newLabel, setNewLabel] = useState("");
-  const [computedValues, setComputedValues] = useState<Record<string, number>>(
-    {}
-  );
-  const [totalResult, setTotalResult] = useState<number | null>(null);
+  const [linkControls, setLinkControls] = useState<
+    Record<string, { to: string; operator: LogicCollection["operator"] }>
+  >({});
+  const [newTitle, setNewTitle] = useState<string>("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [showAddPanel, setShowAddPanel] = useState<Boolean>(false);
 
   const addCard = (title?: string) => {
     const t = (title ?? newTitle).trim();
     if (!t) return;
 
+    const newCardId = CardId();
     const card: Card = {
-      id: newId("c-"),
+      id: newCardId,
       title: t,
-      cardValue: [{ id: newId("v-"), label: "value", value: "" }],
+      cardValue: [{ id: CardId(), label: "value", value: "" }],
     };
     setCards((p) => [...p, card]);
-    setnewTitle("");
+    setNewTitle("");
     setShowAddPanel(false);
   };
 
-  const addCardValue = (cardId: string) => {}
+  const addCardValue = (cardValueId: string) => {
+    setCards((p) =>
+      p.map((c) =>
+        c.id === cardValueId
+          ? {
+              ...c,
+              cardValue: [
+                ...c.cardValue,
+                { id: valueId, label: "", value: "" },
+              ],
+            }
+          : c
+      )
+    );
+  };
 
-  const computeOperator = (a: number, b: number, op: string) => {
+  const updateCardValue = (
+    cardId: string,
+    valueId: string,
+    patch: Partial<CardValue>
+  ) => {
+    setCards((p) =>
+      p.map((c) =>
+        c.id === cardId
+          ? {
+              ...c,
+              cardValue: c.cardValue.map((v) =>
+                v.id === valueId ? { ...v, ...patch } : v
+              ),
+            }
+          : c
+      )
+    );
+  };
+
+  const pathExists = useCallback(
+    (startId: string, targetId: string): boolean => {
+      const adj: Record<string, string[]> = {};
+      cardsLogic.forEach((l) => {
+        if (!adj[l.linkFrom]) adj[l.linkFrom] = [];
+        adj[l.linkFrom].push(l.linkTo);
+      });
+
+      const stack = [startId];
+      const seen = new Set<string>();
+
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (cur === targetId) return true;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        (adj[cur] || []).forEach((n) => stack.push(n));
+      }
+      return false;
+    },
+    [cardsLogic]
+  );
+
+  const addLink = (fromId: string) => {
+    const ctrl = linkControls[fromId];
+    if (!ctrl || !ctrl.to) {
+      setMessage("Choose a 'Link To' target first.");
+      return;
+    }
+
+    if (ctrl.to === fromId) {
+      setMessage("Cannot link a card to itself.");
+      return;
+    }
+
+    if (pathExists(ctrl.to, fromId)) {
+      setMessage("Cannot add link: ");
+      return;
+    }
+
+    setCardsLogic((p) => [
+      ...p,
+      { linkFrom: fromId, linkTo: ctrl.to, operator: ctrl.operator },
+    ]);
+  };
+
+  const removeCard = (cardId: string) => {
+    setCards((p) => p.filter((c) => c.id !== cardId));
+
+    setCardsLogic((p) =>
+      p.filter((l) => l.linkFrom !== cardId && l.linkTo !== cardId)
+    );
+
+    setLinkControls((p) => {
+      const copy = { ...p };
+      delete copy[cardId];
+      return copy;
+    });
+  };
+
+  const removeLink = (index: number) => {
+    setCardsLogic((p) => p.filter((_, i) => i !== index));
+  };
+
+  const computeOperator = (
+    a: number,
+    b: number,
+    op: LogicCollection["operator"]
+  ) => {
     switch (op) {
       case "+":
         return a + b;
@@ -60,218 +142,290 @@ export const CardCalculator = () => {
       case "*":
         return a * b;
       case "/":
-        return b !== 0 ? a / b : a;
+        return a / b;
       default:
         return a;
     }
   };
 
-  const computeAllCards = () => {
+  const computeAll = useCallback(() => {
     const results: Record<string, number> = {};
-    const visited = new Set<string>();
+    const visiting = new Set<string>();
 
-    const compute = (card: Card): number => {
-      if (visited.has(card.id)) return results[card.id] || 0;
-      visited.add(card.id);
+    const findCard = (id: string) => cards.find((c) => c.id === id);
 
-      let val = card.cardValue.reduce((sum, cv) => {
-        return sum + (Number(cv.value) || 0);
-      }, 0);
+    const dfs = (cardId: string): number => {
+      if (cardId in results) return results[cardId];
+      if (visiting.has(cardId)) {
+        return 0;
+      }
+      visiting.add(cardId);
+      const card = findCard(cardId);
 
-      const outgoingLinks = cardsLogic.filter((l) => l.linkFrom === card.id);
+      if (!card) {
+        visiting.delete(cardId);
+        results[cardId] = 0;
+        return 0;
+      }
 
-      outgoingLinks.forEach((link) => {
-        const child = cards.find((c) => c.id === link.linkTo);
-        if (child) val = computeOperator(val, compute(child), link.operator);
-      });
+      //sum card's value
+      let val = card.cardValue.reduce(
+        (s, cv) => s + (Number(cv.value) || 0),
+        0
+      );
 
-      results[card.id] = val;
+      //
+      const outgoing = cardsLogic.filter((l) => l.linkFrom === cardId);
+      for (const l of outgoing) {
+        const childVal = dfs(l.linkTo);
+        val = computeOperator(val, childVal, l.operator);
+      }
+      results[cardId] = val;
+      visiting.delete(cardId);
       return val;
     };
 
-    cards.forEach(compute);
-    setComputedValues(results);
+    //
+    cards.forEach((c) => dfs(c.id));
+    return results;
+  }, [cards, cardsLogic]);
 
-    // total = sum of all cards with links
-    const total = cardsLogic.reduce((acc, link) => {
-      return acc + (results[link.linkFrom] || 0);
-    }, 0);
-    setTotalResult(total);
-  };
-  console.log("CARDS", cards);
-  console.log("card links", cardsLogic);
-  console.log("Computation Storage", computedValues);
+  //
+  const computedValues = useMemo(() => computeAll(), [computeAll]);
+
+  //
+  const rootCards = useMemo(
+    () => cards.filter((c) => !cardsLogic.some((l) => l.linkTo === c.id)),
+    [cards, cardsLogic]
+  );
+
+  //
+  const totalResult = useMemo(
+    () => rootCards.reduce((s, c) => s + (computedValues[c.id] ?? 0), 0),
+    [rootCards, computedValues]
+  );
+
+  //<
+
+  const setControl = (
+    cardId: string,
+    next: Partial<{ to: string; operator: LogicCollection["operator"] }>
+  ) =>
+    setLinkControls((p) => ({
+      ...(p || {}),
+      [cardId]: {
+        to: next.to ?? p?.[cardId]?.to ?? "",
+        operator: next.operator ?? p?.[cardId]?.operator ?? "+",
+      },
+    }));
 
   return (
-    <div>
-      <button onClick={() => setShowAddPanel((p) => !p)}>
-        {showAddPanel ? "Cancel" : "Add Card"}
-      </button>
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setShowAddPanel((s) => !s)}
+          className="rounded bg-indigo-600 text-white px-3 py-1"
+        >
+          {showAddPanel ? "Cancel" : "Add Card"}
+        </button>
+        <div className="text-sm text-gray-600">
+          Total (sum of root formulas): <strong>{totalResult}</strong>
+        </div>
+      </div>
 
-      {/* Add card */}
       {showAddPanel && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
             addCard();
           }}
-          className="flex gap-2 mt-2"
+          className="flex gap-2"
         >
           <input
-            type="text"
-            placeholder="Label"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            className="border rounded-md p-2 flex-1"
+            className="border p-2 rounded flex-1"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Card title (e.g. Income)"
           />
           <button
             type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded-md"
+            className="bg-green-600 text-white px-3 rounded"
           >
-            Submit
+            Add
           </button>
         </form>
       )}
 
-      <div className="grid grid-cols-3">
-        {cards.map((card) => (
-          <div
-            key={card.id}
-            className="flex flex-col items-center bg-slate-200 p-4 rounded-xl gap-2"
-          >
-            <div className="flex gap-2 mt-2">
-              <span>{card.id}</span>
-              <button>Add</button>
+      {message && <div className="text-sm text-red-600">{message}</div>}
 
-              <select id={`link-to-${card.id}`} className="border p-1">
-                <option value="">Link To...</option>
-                {/* label for linking use proper name */}
-                {cards
-                  .filter((c) => c.id !== card.id)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id}
-                    </option>
-                  ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  const sel = document.getElementById(
-                    `link-to-${card.id}`
-                  ) as HTMLSelectElement;
-                  const opSel = document.getElementById(
-                    `operator-${card.id}`
-                  ) as HTMLSelectElement;
-                  if (sel.value) addLink(card.id, sel.value, opSel.value);
-                }}
-                className="bg-green-600 text-white px-2 rounded-md"
-              >
-                Add Link
-              </button>
-              <select id={`operator-${card.id}`} className="border mt-1 p-1">
-                <option value="+">+</option>
-                <option value="-">-</option>
-                <option value="*">×</option>
-                <option value="/">÷</option>
-              </select>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {cards.map((card) => (
+          <div key={card.id} className="p-3 bg-slate-100 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-semibold">
+                {card.title}{" "}
+                <span className="text-xs text-gray-500">
+                  ({card.id.slice(0, 6)})
+                </span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  title="Add value"
+                  onClick={() => addCardValue(card.id)}
+                  className="px-2 py-1 text-sm bg-blue-500 text-white rounded"
+                >
+                  +Val
+                </button>
+                <button
+                  title="Delete card"
+                  onClick={() => removeCard(card.id)}
+                  className="px-2 py-1 text-sm bg-red-500 text-white rounded"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
 
-            {card.cardValue.map((cv) => (
-              <div
-                key={cv.id}
-                className="flex items-center justify-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={cv.label}
-                  onChange={(e) =>
-                    setCards((prev) =>
-                      prev.map((c) =>
-                        c.id === card.id
-                          ? {
-                              ...c,
-                              cardValue: c.cardValue.map((item) =>
-                                item.id === cv.id
-                                  ? { ...item, label: e.target.value }
-                                  : item
-                              ),
-                            }
-                          : c
-                      )
-                    )
-                  }
-                  className="border p-1 w-full"
-                />
-                :
-                <input
-                  type="number"
-                  value={cv.value}
-                  onChange={(e) =>
-                    setCards((prev) =>
-                      prev.map((c) =>
-                        c.id === card.id
-                          ? {
-                              ...c,
-                              cardValue: c.cardValue.map((item) =>
-                                item.id === cv.id
-                                  ? { ...item, value: e.target.value }
-                                  : item
-                              ),
-                            }
-                          : c
-                      )
-                    )
-                  }
-                  className="border p-1 w-full"
-                />
-                <div className="text-sm text-gray-700 mt-1">
-                  {cardsLogic
-                    .filter((l) => l.linkFrom === card.id)
-                    .map((l, i) => {
-                      const toCardLabel =
-                        cards.find((c) => c.id === l.linkTo)?.id || "";
-                      return (
-                        <div key={i}>
-                          {cv.label} <ChevronRight /> {toCardLabel} (
-                          {l.operator})
-                        </div>
-                      );
-                    })}
-
-                  {cardsLogic
-                    .filter((l) => l.linkTo === card.id)
-                    .map((l, i) => {
-                      const fromCardLabel =
-                        cards.find((c) => c.id === l.linkFrom)?.id || "?";
-                      return (
-                        <div key={i}>
-                          {fromCardLabel} <ChevronLeft /> {cv.label} (
-                          {l.operator})
-                        </div>
-                      );
-                    })}
+            <div className="space-y-2">
+              {card.cardValue.map((cv) => (
+                <div key={cv.id} className="flex gap-2 items-center">
+                  <input
+                    className="flex-1 border p-1 rounded"
+                    placeholder="label"
+                    value={cv.label}
+                    onChange={(e) =>
+                      updateCardValue(card.id, cv.id, { label: e.target.value })
+                    }
+                  />
+                  <input
+                    className="w-24 border p-1 rounded"
+                    placeholder="0"
+                    value={cv.value}
+                    onChange={(e) =>
+                      updateCardValue(card.id, cv.id, { value: e.target.value })
+                    }
+                    type="number"
+                  />
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
 
-            <div className="mt-1 text-blue-700">
-              Computed: {computedValues[card.id] ?? 0}
+            {/* linking controls (controlled, no direct DOM access) */}
+            <div className="mt-3 border-t pt-3">
+              <div className="text-xs text-gray-600 mb-1">
+                Create link from this card:
+              </div>
+              <div className="flex gap-2 items-center">
+                <select
+                  className="border p-1 rounded flex-1"
+                  value={linkControls[card.id]?.to ?? ""}
+                  onChange={(e) => setControl(card.id, { to: e.target.value })}
+                >
+                  <option value="">Link To...</option>
+                  {cards
+                    .filter((c) => c.id !== card.id)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title} ({c.id.slice(0, 6)})
+                      </option>
+                    ))}
+                </select>
+
+                <select
+                  className="border p-1 rounded"
+                  value={linkControls[card.id]?.operator ?? "+"}
+                  onChange={(e) =>
+                    setControl(card.id, {
+                      operator: e.target.value as LogicCollection["operator"],
+                    })
+                  }
+                >
+                  <option value="+">+</option>
+                  <option value="-">-</option>
+                  <option value="*">*</option>
+                  <option value="/">/</option>
+                </select>
+
+                <button
+                  onClick={() => addLink(card.id)}
+                  className="bg-green-600 text-white px-2 py-1 rounded"
+                >
+                  Add Link
+                </button>
+              </div>
+
+              {/* show outgoing/incoming links for this card */}
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="mb-1 font-medium">Links from this card</div>
+                {cardsLogic.filter((l) => l.linkFrom === card.id).length ===
+                  0 && <div className="text-xs text-gray-500">— none —</div>}
+                {cardsLogic
+                  .filter((l) => l.linkFrom === card.id)
+                  .map((l, i) => {
+                    const toCard = cards.find((c) => c.id === l.linkTo);
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="text-xs">
+                          {card.title}{" "}
+                          <ChevronRight className="inline-block h-3 w-3" />{" "}
+                          {toCard?.title ?? l.linkTo} ({l.operator})
+                        </div>
+                        <button
+                          className="text-xs text-red-600"
+                          onClick={() => {
+                            // remove this specific link
+                            const idx = cardsLogic.findIndex(
+                              (x) =>
+                                x.linkFrom === l.linkFrom &&
+                                x.linkTo === l.linkTo &&
+                                x.operator === l.operator
+                            );
+                            if (idx >= 0) removeLink(idx);
+                          }}
+                        >
+                          x
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                <div className="mt-2 mb-1 font-medium">
+                  Links into this card
+                </div>
+                {cardsLogic.filter((l) => l.linkTo === card.id).length ===
+                  0 && <div className="text-xs text-gray-500">— none —</div>}
+                {cardsLogic
+                  .filter((l) => l.linkTo === card.id)
+                  .map((l, i) => {
+                    const fromCard = cards.find((c) => c.id === l.linkFrom);
+                    return (
+                      <div key={i} className="text-xs">
+                        {fromCard?.title ?? l.linkFrom}{" "}
+                        <ChevronLeft className="inline-block h-3 w-3" />{" "}
+                        {card.title} ({l.operator})
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-blue-700">
+              Computed: <strong>{computedValues[card.id] ?? 0}</strong>
             </div>
           </div>
         ))}
       </div>
 
-      <button
-        onClick={computeAllCards}
-        className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md"
-      >
-        Show Result
-      </button>
-
-      {totalResult !== null && (
-        <div className="mt-2 font-bold">TOTAL Result: {totalResult}</div>
-      )}
+      {/* small footer with computed JSON for debugging */}
+      <div className="mt-4 text-xs text-gray-500">
+        <div>
+          Cards: {cards.length} · Links: {cardsLogic.length} · Roots:{" "}
+          {rootCards.length}
+        </div>
+      </div>
     </div>
   );
 };
