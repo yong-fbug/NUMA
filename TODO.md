@@ -29,3 +29,5 @@ topological sortk
 -[y] still fixing
 
 -[x] do not forget to slice those piece so files will not be crowded and hard to read
+
+11-23-25 (09:19) -[y] Done with basic math calculation for each cards link

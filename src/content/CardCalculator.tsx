@@ -2,8 +2,16 @@ import { useCallback, useMemo, useState } from "react";
 import type { Card, CardValue, LogicCollection } from "./types/card";
 import { CardId } from "./components/CardId";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  computeAll,
+  computeName,
+  validateOperation,
+} from "../utils/ComputationEngine";
 
 const valueId = CardId();
+
+const ALLOWED_TITLES = ["income", "cost", "savings", "debt"] as const;
+type AllowedTitle = (typeof ALLOWED_TITLES)[number];
 
 export const CardCalculator = () => {
   const [cards, setCards] = useState<Card[]>([]);
@@ -11,9 +19,12 @@ export const CardCalculator = () => {
   const [linkControls, setLinkControls] = useState<
     Record<string, { to: string; operator: LogicCollection["operator"] }>
   >({});
-  const [newTitle, setNewTitle] = useState<string>("");
+  const [newTitle, setNewTitle] = useState<AllowedTitle>("income");
   const [message, setMessage] = useState<string | null>(null);
   const [showAddPanel, setShowAddPanel] = useState<Boolean>(false);
+
+  console.log("Cards", cards);
+  console.log("Links", linkControls);
 
   const addCard = (title?: string) => {
     const t = (title ?? newTitle).trim();
@@ -22,11 +33,11 @@ export const CardCalculator = () => {
     const newCardId = CardId();
     const card: Card = {
       id: newCardId,
-      title: t,
+      title: t as AllowedTitle,
       cardValue: [{ id: CardId(), label: "value", value: "" }],
     };
     setCards((p) => [...p, card]);
-    setNewTitle("");
+    setNewTitle("income");
     setShowAddPanel(false);
   };
 
@@ -90,8 +101,23 @@ export const CardCalculator = () => {
 
   const addLink = (fromId: string) => {
     const ctrl = linkControls[fromId];
+
     if (!ctrl || !ctrl.to) {
       setMessage("Choose a 'Link To' target first.");
+      return;
+    }
+    const fromCard = cards.find((c) => c.id === fromId);
+    const toCard = cards.find((c) => c.id === ctrl.to);
+
+    if (!fromCard || !toCard) {
+      setMessage("Invalid card reference");
+      return;
+    }
+
+    if (!validateOperation(fromCard?.title, toCard?.title, ctrl.operator)) {
+      setMessage(
+        `Operation not allowed: ${fromCard.title} ${ctrl.operator} ${toCard.title}`
+      );
       return;
     }
 
@@ -100,6 +126,12 @@ export const CardCalculator = () => {
       return;
     }
 
+    const resultName = computeName(
+      fromCard.title.toLowerCase(),
+      toCard.title.toLowerCase(),
+      ctrl.operator
+    );
+
     if (pathExists(ctrl.to, fromId)) {
       setMessage("Cannot add link: ");
       return;
@@ -107,7 +139,12 @@ export const CardCalculator = () => {
 
     setCardsLogic((p) => [
       ...p,
-      { linkFrom: fromId, linkTo: ctrl.to, operator: ctrl.operator },
+      {
+        linkFrom: fromId,
+        linkTo: ctrl.to,
+        operator: ctrl.operator,
+        name: resultName,
+      },
     ]);
   };
 
@@ -129,69 +166,11 @@ export const CardCalculator = () => {
     setCardsLogic((p) => p.filter((_, i) => i !== index));
   };
 
-  const computeOperator = (
-    a: number,
-    b: number,
-    op: LogicCollection["operator"]
-  ) => {
-    switch (op) {
-      case "+":
-        return a + b;
-      case "-":
-        return a - b;
-      case "*":
-        return a * b;
-      case "/":
-        return a / b;
-      default:
-        return a;
-    }
-  };
-
-  const computeAll = useCallback(() => {
-    const results: Record<string, number> = {};
-    const visiting = new Set<string>();
-
-    const findCard = (id: string) => cards.find((c) => c.id === id);
-
-    const dfs = (cardId: string): number => {
-      if (cardId in results) return results[cardId];
-      if (visiting.has(cardId)) {
-        return 0;
-      }
-      visiting.add(cardId);
-      const card = findCard(cardId);
-
-      if (!card) {
-        visiting.delete(cardId);
-        results[cardId] = 0;
-        return 0;
-      }
-
-      //sum card's value
-      let val = card.cardValue.reduce(
-        (s, cv) => s + (Number(cv.value) || 0),
-        0
-      );
-
-      //
-      const outgoing = cardsLogic.filter((l) => l.linkFrom === cardId);
-      for (const l of outgoing) {
-        const childVal = dfs(l.linkTo);
-        val = computeOperator(val, childVal, l.operator);
-      }
-      results[cardId] = val;
-      visiting.delete(cardId);
-      return val;
-    };
-
-    //
-    cards.forEach((c) => dfs(c.id));
-    return results;
-  }, [cards, cardsLogic]);
-
   //
-  const computedValues = useMemo(() => computeAll(), [computeAll]);
+  const computedValues = useMemo(
+    () => computeAll(cards, cardsLogic),
+    [cards, cardsLogic]
+  );
 
   //
   const rootCards = useMemo(
@@ -228,9 +207,12 @@ export const CardCalculator = () => {
         >
           {showAddPanel ? "Cancel" : "Add Card"}
         </button>
-        <div className="text-sm text-gray-600">
-          Total (sum of root formulas): <strong>{totalResult}</strong>
-        </div>
+        {cardsLogic.map((l) => (
+          <div key={`${l.linkFrom}-${l.linkTo}`}>
+            {`
+               ${l.name}: ${totalResult}`}
+          </div>
+        ))}
       </div>
 
       {showAddPanel && (
@@ -241,12 +223,14 @@ export const CardCalculator = () => {
           }}
           className="flex gap-2"
         >
-          <input
-            className="border p-2 rounded flex-1"
+          <select
             value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Card title (e.g. Income)"
-          />
+            onChange={(e) => setNewTitle(e.target.value as AllowedTitle)}
+          >
+            {ALLOWED_TITLES.map((t) => (
+              <option key={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            ))}
+          </select>
           <button
             type="submit"
             className="bg-green-600 text-white px-3 rounded"
@@ -275,13 +259,6 @@ export const CardCalculator = () => {
                   className="px-2 py-1 text-sm bg-blue-500 text-white rounded"
                 >
                   +Val
-                </button>
-                <button
-                  title="Delete card"
-                  onClick={() => removeCard(card.id)}
-                  className="px-2 py-1 text-sm bg-red-500 text-white rounded"
-                >
-                  Delete
                 </button>
               </div>
             </div>
@@ -405,7 +382,8 @@ export const CardCalculator = () => {
                       <div key={i} className="text-xs">
                         {fromCard?.title ?? l.linkFrom}{" "}
                         <ChevronLeft className="inline-block h-3 w-3" />{" "}
-                        {card.title} ({l.operator})
+                        {l.name ??
+                          `${card.title} ${l.operator} ${fromCard?.title}`}
                       </div>
                     );
                   })}
@@ -413,8 +391,18 @@ export const CardCalculator = () => {
             </div>
 
             <div className="mt-3 text-sm text-blue-700">
-              Computed: <strong>{computedValues[card.id] ?? 0}</strong>
+              Total:{" "}
+              <strong>
+                {card.title}: {computedValues[card.id] ?? 0}
+              </strong>
             </div>
+            <button
+              title="Delete card"
+              onClick={() => removeCard(card.id)}
+              className="px-2 py-1 text-sm bg-red-500 text-white rounded"
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>
