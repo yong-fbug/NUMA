@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Card, CardValue, LogicCollection } from "./types/card";
-import { CardId } from "./components/CardId";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CardId } from "./types/CardId";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import {
   computeAll,
   computeName,
@@ -22,6 +22,7 @@ export const CardCalculator = () => {
   const [newTitle, setNewTitle] = useState<AllowedTitle>("income");
   const [message, setMessage] = useState<string | null>(null);
   const [showAddPanel, setShowAddPanel] = useState<Boolean>(false);
+  const [showDeletePanel, setshowDeletePanel] = useState<string | null>(null);
 
   console.log("Cards", cards);
   console.log("Links", linkControls);
@@ -34,24 +35,34 @@ export const CardCalculator = () => {
     const card: Card = {
       id: newCardId,
       title: t as AllowedTitle,
-      cardValue: [{ id: CardId(), label: "value", value: "" }],
+      cardValue: [{ id: CardId(), label: "label", value: "" }],
     };
     setCards((p) => [...p, card]);
     setNewTitle("income");
     setShowAddPanel(false);
   };
 
-  const addCardValue = (cardValueId: string) => {
+  const addCardInput = (cardInputId: string) => {
     setCards((p) =>
       p.map((c) =>
-        c.id === cardValueId
+        c.id === cardInputId
           ? {
               ...c,
               cardValue: [
                 ...c.cardValue,
-                { id: valueId, label: "", value: "" },
+                { id: CardId(), label: "", value: "" },
               ],
             }
+          : c
+      )
+    );
+  };
+
+  const removeCardInput = (cardId: string, valueId: string) => {
+    setCards((p) =>
+      p.map((c) =>
+        c.id === cardId
+          ? { ...c, cardValue: c.cardValue.filter((v) => v.id !== valueId) }
           : c
       )
     );
@@ -104,6 +115,9 @@ export const CardCalculator = () => {
 
     if (!ctrl || !ctrl.to) {
       setMessage("Choose a 'Link To' target first.");
+      setTimeout(() => {
+        setMessage(null);
+      }, 1000);
       return;
     }
     const fromCard = cards.find((c) => c.id === fromId);
@@ -111,6 +125,9 @@ export const CardCalculator = () => {
 
     if (!fromCard || !toCard) {
       setMessage("Invalid card reference");
+      setTimeout(() => {
+        setMessage(null);
+      }, 1000);
       return;
     }
 
@@ -184,7 +201,10 @@ export const CardCalculator = () => {
     [rootCards, computedValues]
   );
 
-  //<
+  //open delete input
+  const deleteInput = (cardId: string) => {
+    setshowDeletePanel((p) => (p === cardId ? null : cardId));
+  };
 
   const setControl = (
     cardId: string,
@@ -255,10 +275,14 @@ export const CardCalculator = () => {
               <div className="flex gap-1">
                 <button
                   title="Add value"
-                  onClick={() => addCardValue(card.id)}
-                  className="px-2 py-1 text-sm bg-blue-500 text-white rounded"
+                  onClick={() => addCardInput(card.id)}
+                  className="px-2 py-1 text-sm text-black rounded"
                 >
-                  +Val
+                  <Plus />
+                </button>
+
+                <button onClick={() => deleteInput(card.id)}>
+                  {showDeletePanel === card.id ? "Cancel" : "Delete"}
                 </button>
               </div>
             </div>
@@ -283,6 +307,12 @@ export const CardCalculator = () => {
                     }
                     type="number"
                   />
+
+                  {showDeletePanel === card.id && (
+                    <button onClick={() => removeCardInput(card.id, cv.id)}>
+                      <X />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
